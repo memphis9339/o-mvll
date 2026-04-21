@@ -99,6 +99,23 @@ BreakControlFlowOpt PyObfuscationConfig::breakControlFlow(llvm::Module *M,
   return false;
 }
 
+bool PyObfuscationConfig::junkCode(llvm::Module *M, llvm::Function *F) {
+  py::gil_scoped_acquire gil;
+  const auto *Base = static_cast<const ObfuscationConfig *>(this);
+  py::function override = py::get_override(Base, "junk_code");
+  if (override) {
+    try {
+      py::object out = override(M, F);
+      if (out.is_none()) return false;
+      if (py::isinstance<py::bool_>(out))
+        return out.cast<py::bool_>();
+    } catch (const std::exception &e) {
+      fatalError("Error in 'junk_code': '"s + e.what() + "'");
+    }
+  }
+  return false;
+}
+
 ControlFlowFlatteningOpt
 PyObfuscationConfig::controlFlowGraphFlattening(llvm::Module *M,
                                                 llvm::Function *F) {

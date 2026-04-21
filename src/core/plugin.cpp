@@ -133,6 +133,7 @@ PassPluginLibraryInfo getOMVLLPluginInfo() {
                     MPM.addPass(omvll::BreakControlFlow());
                     MPM.addPass(omvll::OpaqueConstants());
                     MPM.addPass(omvll::Arithmetic());
+                    MPM.addPass(omvll::JunkCode());
 #ifdef OMVLL_EXPERIMENTAL
                     // ObjCleaner must be the last pass as function's name
                     // could be changed, which can be confusing for the user.

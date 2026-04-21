@@ -47,6 +47,8 @@ class PyObfuscationConfig : public ObfuscationConfig {
   FunctionOutlineOpt functionOutline(llvm::Module *M,
                                      llvm::Function *F) override;
 
+  bool junkCode(llvm::Module *mod, llvm::Function *func) override;
+
   bool defaultConfig(llvm::Module *M, llvm::Function *F,
                      const std::vector<std::string> &ModuleExcludes = {},
                      const std::vector<std::string> &FunctionExcludes = {},

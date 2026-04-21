@@ -366,6 +366,13 @@ void OMVLLCtor(py::module_ &m) {
          )delim",
            "module"_a, "function"_a)
 
+      .def("junk_code", &ObfuscationConfig::junkCode,
+        R"delim(
+        The default user-callback to insert junk code by outlining
+        randomly selected basic blocks into new functions.
+        )delim",
+        "module"_a, "function"_a)
+
       .def("report_diff", &ObfuscationConfig::reportDiff,
            R"delim(
          User-callback to monitor IR-level changes from individual obfuscation passes.

@@ -32,10 +32,16 @@ set(OMVLL_ABI "${OMVLL_DEFAULT_ABI}" CACHE STRING
 if(OMVLL_ABI STREQUAL "Apple")
   set(LLVM_REQUIRED_VERSION 19.1.4)
 elseif(OMVLL_ABI STREQUAL "Android")
-  set(LLVM_REQUIRED_VERSION 17)
+  set(LLVM_REQUIRED_VERSION 17.0.2)
 else()
   # TODO: switch Linux build to release NDK
   set(LLVM_REQUIRED_VERSION 17.0.2)
+endif()
+
+# Workaround: alias system zstd shared as static for LLVM deps
+find_package(zstd REQUIRED)
+if(TARGET zstd::libzstd_shared AND NOT TARGET zstd::libzstd_static)
+  add_library(zstd::libzstd_static ALIAS zstd::libzstd_shared)
 endif()
 
 find_package(LLVM ${LLVM_REQUIRED_VERSION} REQUIRED CONFIG NO_DEFAULT_PATH)
@@ -208,7 +214,7 @@ llvm_map_components_to_libnames(llvm_libs
 
 # TODO: double-check with NDK on Linux
 if(OMVLL_ABI STREQUAL "Android")
-  target_link_libraries(OMVLL PRIVATE LLVM)
+  target_link_libraries(OMVLL PRIVATE ${llvm_libs})
 else()
   target_link_libraries(OMVLL PRIVATE
     ${llvm_libs}
