@@ -13,31 +13,63 @@ const char *DecodeRoutines[] = {
     void decode(char *out, char *in, unsigned long long key, int size) {
       unsigned char *raw_key = (unsigned char*)(&key);
       for (int i = 0; i < size; ++i) {
-        out[i] = in[i] ^ raw_key[i % sizeof(key)];
+        unsigned char c = in[i] ^ (unsigned char)(i * 0x6B);
+        c = c ^ raw_key[i % sizeof(key)];
+        int rot = (i % 7) + 1;
+        c = (c << rot) | (c >> (8 - rot));
+        
+        out[i] = c;
       }
     }
   )delim",
   R"delim(
     void decode(char *out, char *in, unsigned long long key, int size) {
+      unsigned char S[256];
       unsigned char *raw_key = (unsigned char*)(&key);
+      int key_len = sizeof(key);
+      for (int i = 0; i < 256; ++i) S[i] = (unsigned char)i;
+      int j = 0;
+      for (int i = 0; i < 256; ++i) {
+        j = (j + S[i] + raw_key[i % key_len]) & 0xFF;
+        unsigned char tmp = S[i]; S[i] = S[j]; S[j] = tmp;
+      }
+      int si = 0; j = 0;
       for (int i = 0; i < size; ++i) {
-        out[i] = in[i] ^ raw_key[i % sizeof(key)] ^ i;
+        si = (si + 1) & 0xFF;
+        j  = (j + S[si]) & 0xFF;
+        unsigned char tmp = S[si]; S[si] = S[j]; S[j] = tmp;
+        out[i] = in[i] ^ S[(S[si] + S[j]) & 0xFF];
       }
     }
-  )delim",
+)delim",
 };
 
 omvll::EncRoutineFn *EncodeRoutines[] = {
+    [] (char *out, const char *in, unsigned long long key, int size) {
+    unsigned char *raw_key = (unsigned char *)(&key);
+    for (int i = 0; i < size; ++i) {
+      unsigned char c = (unsigned char)in[i];
+      int rot = (i % 7) + 1;
+      c = (c >> rot) | (c << (8 - rot));
+      out[i] = c ^ raw_key[i % sizeof(key)] ^ (unsigned char)(i * 0x6B);
+    }
+  },
     [](char *out, const char *in, unsigned long long key, int size) {
+      unsigned char S[256];
       unsigned char *raw_key = (unsigned char *)(&key);
-      for (int i = 0; i < size; ++i) {
-        out[i] = in[i] ^ raw_key[i % sizeof(key)];
+      int key_len = sizeof(key);
+      for (int i = 0; i < 256; ++i) S[i] = (unsigned char)i;
+      int j = 0;
+      for (int i = 0; i < 256; ++i) {
+        j = (j + S[i] + raw_key[i % key_len]) & 0xFF;
+        unsigned char tmp = S[i]; S[i] = S[j]; S[j] = tmp;
       }
-    },
-    [](char *out, const char *in, unsigned long long key, int size) {
-      unsigned char *raw_key = (unsigned char *)(&key);
+      int si = 0; j = 0;
       for (int i = 0; i < size; ++i) {
-        out[i] = in[i] ^ raw_key[i % sizeof(key)] ^ i;
+        si = (si + 1) & 0xFF;
+        j  = (j + S[si]) & 0xFF;
+        unsigned char tmp = S[si]; S[si] = S[j]; S[j] = tmp;
+        out[i] = in[i] ^ S[(S[si] + S[j]) & 0xFF];
       }
     }};
 
