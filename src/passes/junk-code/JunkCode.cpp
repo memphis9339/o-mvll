@@ -212,12 +212,37 @@ static void emitJunkArrayOps(IRBuilder<> &B, LLVMContext &Ctx) {
 }
 
 bool JunkCode::process(Function &F) {
+    StringRef Name = F.getName();
+    if (Name.startswith("_ZSt") ||
+        Name.startswith("_ZNSt") ||
+        Name.startswith("std::") ||
+        Name.startswith("__gnu_cxx") ||
+        Name.startswith("__cxx") ||
+        Name.contains("std::") ||
+        Name.startswith("llvm."))
+        return false;
+
+    if (F.arg_size() > 4)
+        return false;
+
+    bool HasLoop = false;
+    for (BasicBlock &BB : F) {
+        for (Instruction &I : BB) {
+            if (isa<LoadInst>(&I) || isa<StoreInst>(&I)) {
+                if (I.hasNUses(0))
+                    HasLoop = true;
+            }
+        }
+    }
+    if (HasLoop)
+        return false;
+
     bool Changed = false;
     LLVMContext &Ctx = F.getContext();
 
     SmallVector<BasicBlock *, 32> OrigBlocks;
     for (BasicBlock &BB : F) {
-        if (BB.size() < 2 || BB.isLandingPad())
+        if (BB.size() < 2 || BB.isLandingPad() || BB.isEHPad())
             continue;
         OrigBlocks.push_back(&BB);
     }
@@ -227,59 +252,48 @@ bool JunkCode::process(Function &F) {
         if (!InsertPt || isa<LandingPadInst>(InsertPt))
             continue;
 
-            if (BB->isEHPad())
-            continue;
-
         uint32_t NumJunk = RandomGenerator::generateRange(1, 3);
 
         for (uint32_t i = 0; i < NumJunk; ++i) {
             BasicBlock *NextBB = BB->splitBasicBlock(InsertPt, "omvll.cont");
             if (!NextBB) break;
 
-  
             BB->getTerminator()->eraseFromParent();
 
             BasicBlock *JunkBB = BasicBlock::Create(Ctx, "omvll.junk", &F);
 
             IRBuilder<> BBBuilder(BB);
 
-            Value *GoToJunk;
-            if (RandomGenerator::generateRange(0, 1) == 0) {
-                GoToJunk = createOpaqueAlwaysFalse(BBBuilder, Ctx);
+            bool AlwaysTrue = RandomGenerator::generateRange(0, 1) == 1;
+            Value *Opaque;
+            if (AlwaysTrue) {
+                Opaque = createOpaqueAlwaysTrue(BBBuilder, Ctx);
             } else {
-                GoToJunk = createOpaqueAlwaysTrue(BBBuilder, Ctx);
-                BBBuilder.CreateCondBr(GoToJunk, NextBB, JunkBB);
-                goto junk_fill; 
+                Opaque = createOpaqueAlwaysFalse(BBBuilder, Ctx);
             }
 
-            BBBuilder.CreateCondBr(GoToJunk, JunkBB, NextBB);
+            BBBuilder.CreateCondBr(Opaque, NextBB, JunkBB);
 
-            junk_fill:
-            {
-                IRBuilder<> JunkBuilder(JunkBB);
+            IRBuilder<> JunkBuilder(JunkBB);
 
-                uint32_t Pattern = RandomGenerator::generateRange(0, 3);
-                switch (Pattern) {
-                case 0:
-                    emitJunkArithChain(JunkBuilder, Ctx);
-                    JunkBuilder.CreateBr(NextBB);
-                    break;
-                case 1:
-                    emitJunkInlineAsm(JunkBuilder, Ctx);
-                    emitJunkArithChain(JunkBuilder, Ctx);
-                    JunkBuilder.CreateBr(NextBB);
-                    break;
-                case 2:
-                    emitJunkArrayOps(JunkBuilder, Ctx);
-                    JunkBuilder.CreateBr(NextBB);
-                    break;
-                case 3:
-                    emitJunkArithChain(JunkBuilder, Ctx);
-                    emitJunkArrayOps(JunkBuilder, Ctx);
-                    JunkBuilder.CreateBr(NextBB);
-                    break;
-                }
+            uint32_t Pattern = RandomGenerator::generateRange(0, 3);
+            switch (Pattern) {
+            case 0:
+                emitJunkArithChain(JunkBuilder, Ctx);
+                break;
+            case 1:
+                emitJunkInlineAsm(JunkBuilder, Ctx);
+                emitJunkArithChain(JunkBuilder, Ctx);
+                break;
+            case 2:
+                emitJunkArrayOps(JunkBuilder, Ctx);
+                break;
+            case 3:
+                emitJunkArithChain(JunkBuilder, Ctx);
+                emitJunkArrayOps(JunkBuilder, Ctx);
+                break;
             }
+            JunkBuilder.CreateBr(NextBB);
 
             BB = NextBB;
             InsertPt = NextBB->getFirstNonPHIOrDbgOrLifetime();
@@ -295,6 +309,9 @@ bool JunkCode::process(Function &F) {
 PreservedAnalyses JunkCode::run(Module &M, ModuleAnalysisManager &MAM) {
     if (isModuleGloballyExcluded(&M))
         return PreservedAnalyses::all();
+
+
+  
 
     bool Changed = false;
     PyConfig &Config = PyConfig::instance();
